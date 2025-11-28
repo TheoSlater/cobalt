@@ -218,7 +218,8 @@ export const services = {
             "watch?v=:id",
             "embed/:id",
             "watch/:id",
-            "v/:id"
+            "v/:id",
+            "post/:postId",
         ],
         subdomains: ["music", "m"],
     }
