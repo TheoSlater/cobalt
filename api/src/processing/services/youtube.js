@@ -76,6 +76,7 @@ const videoQualities = [144, 240, 360, 480, 720, 1080, 1440, 2160, 4320];
 
 let unavailableResponses = 0;
 
+let encryptedHostFlags = "";
 const cloneInnertube = async (customFetch, useSession) => {
     const shouldRefreshPlayer = globalThis.FORCE_RESET_INNERTUBE_PLAYER || lastRefreshedAt + PLAYER_REFRESH_PERIOD < new Date();
 
@@ -109,6 +110,20 @@ const cloneInnertube = async (customFetch, useSession) => {
             player_id,
         });
         lastRefreshedAt = +new Date();
+
+        const embedResp = await customFetch("https://youtube.com/embed/QfKmnuHMpYo", {
+            headers: {
+                "Referer": "https://www.google.com"
+            }
+        })
+            .then(r => r.text());
+        
+        const hostFlagsMatch = /encryptedHostFlags":"(.+?)"/.exec(embedResp);
+        if (hostFlagsMatch?.length > 1) {
+            encryptedHostFlags = hostFlagsMatch[1];
+        } else {
+            console.error(new Date(), "Could not fetch encryptedHostFlags, no match!");
+        }
     }
 
     const session = new Session(
@@ -332,7 +347,17 @@ export default async function (o) {
 
     let info;
     try {
-        info = await yt.getBasicInfo(o.id, { client: innertubeClient });
+        info = await yt.actions.execute("/player", {
+            videoId: o.id,
+            client: innertubeClient,
+            parse: true,
+            playbackContext: {
+                contentPlaybackContext: {
+                    encryptedHostFlags
+                }
+            }
+        })
+        // info = await yt.getBasicInfo(o.id, { client: innertubeClient });
     } catch (e) {
         if (e?.info) {
             let errorInfo;
@@ -369,7 +394,7 @@ export default async function (o) {
     if (!info) return { error: "fetch.fail" };
 
     const playability = info.playability_status;
-    const basicInfo = info.basic_info;
+    const basicInfo = info.video_details;
 
     switch (playability.status) {
         case "LOGIN_REQUIRED":
