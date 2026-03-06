@@ -1,81 +1,66 @@
+import { Agent } from "undici";
 import * as cluster from "../../misc/cluster.js";
 
-import { Agent } from "undici";
 import { env } from "../../config.js";
-import { Green, Yellow } from "../../misc/console-text.js";
 
-const defaultAgent = new Agent();
+const agent = new Agent();
 
 let session;
 
-const validateSession = (sessionResponse) => {
-    if (!sessionResponse.potoken) {
-        throw "no poToken in session response";
-    }
+function validateSession(data) {
+  if (!data.potoken) {
+    throw new Error("missing potoken");
+  }
 
-    if (!sessionResponse.visitor_data) {
-        throw "no visitor_data in session response";
-    }
+  if (!data.visitor_data) {
+    throw new Error("missing visitor_data");
+  }
 
-    if (!sessionResponse.updated) {
-        throw "no last update timestamp in session response";
-    }
+  if (!data.updated) {
+    throw new Error("missing updated timestamp");
+  }
 
-    // https://github.com/iv-org/youtube-trusted-session-generator/blob/c2dfe3f/potoken_generator/main.py#L25
-    if (sessionResponse.potoken.length < 160) {
-        console.error(`${Yellow('[!]')} poToken is too short and might not work (${new Date().toISOString()})`);
-    }
+  if (data.potoken.length < 160) {
+    console.warn("YouTube poToken unusually short");
+  }
 }
 
-const updateSession = (newSession) => {
-    session = newSession;
+async function loadSession() {
+  const url = new URL(env.ytSessionServer);
+  url.pathname = "/token";
+
+  const response = await fetch(url, { dispatcher: agent });
+  const json = await response.json();
+
+  validateSession(json);
+
+  if (!session || session.updated < json.updated) {
+    session = json;
+
+    cluster.broadcast({
+      youtube_session: json,
+    });
+  }
 }
 
-const loadSession = async () => {
-    const sessionServerUrl = new URL(env.ytSessionServer);
-    sessionServerUrl.pathname = "/token";
+export function getYouTubeSession() {
+  return session;
+}
 
-    const newSession = await fetch(
-        sessionServerUrl,
-        { dispatcher: defaultAgent }
-    ).then(a => a.json());
+export function setup() {
+  if (cluster.isPrimary) {
+    loadSession();
 
-    validateSession(newSession);
-
-    if (!session || session.updated < newSession?.updated) {
-        cluster.broadcast({ youtube_session: newSession });
-        updateSession(newSession);
+    if (env.ytSessionReloadInterval > 0) {
+      setInterval(loadSession, env.ytSessionReloadInterval * 1000);
     }
-}
+  }
 
-const wrapLoad = (initial = false) => {
-    loadSession()
-    .then(() => {
-        if (initial) {
-            console.log(`${Green('[✓]')} poToken & visitor_data loaded successfully!`);
-        }
-    })
-    .catch((e) => {
-        console.error(`${Yellow('[!]')} Failed loading poToken & visitor_data at ${new Date().toISOString()}.`);
-        console.error('Error:', e);
-    })
-}
-
-export const getYouTubeSession = () => {
-    return session;
-}
-
-export const setup = () => {
-    if (cluster.isPrimary) {
-        wrapLoad(true);
-        if (env.ytSessionReloadInterval > 0) {
-            setInterval(wrapLoad, env.ytSessionReloadInterval * 1000);
-        }
-    } else if (cluster.isWorker) {
-        process.on('message', (message) => {
-            if ('youtube_session' in message) {
-                updateSession(message.youtube_session);
-            }
-        });
-    }
+  if (cluster.isWorker) {
+    process.on("message", (msg) => {
+      if (msg.youtube_session) {
+        session = msg.youtube_session;
+      }
+    });
+  }
 }
