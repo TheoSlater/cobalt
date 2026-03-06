@@ -20,15 +20,31 @@ const STREAM_HEADERS = {
 };
 
 function createFetch(dispatcher) {
-  return (input, init = {}) =>
-    fetch(input, {
-      ...init,
+  return async (input, init = {}) => {
+    // If input is a Request object, extract URL and method
+    let url = input;
+    let method = init?.method || "GET";
+    let body = init?.body;
+
+    if (input instanceof Request) {
+      url = input.url;
+      method = input.method || "GET";
+      // For GET/HEAD requests, don't pass body even if init has it
+      if (method !== "GET" && method !== "HEAD") {
+        body = init.body;
+      }
+    }
+
+    return fetch(url, {
+      method,
+      body,
       dispatcher,
       headers: {
         ...STREAM_HEADERS,
         ...(init.headers || {}),
       },
     });
+  };
 }
 
 async function cloneInnertube(customFetch, useSession, forceRefresh = false) {
@@ -50,8 +66,8 @@ async function cloneInnertube(customFetch, useSession, forceRefresh = false) {
 
   if (!innertube || shouldRefresh) {
     innertube = await Innertube.create({
-      fetch: customFetch,
       retrieve_player,
+      player_id: "0004de42",
       cookie,
       po_token: useSession ? sessionTokens?.potoken : undefined,
       visitor_data: useSession ? sessionTokens?.visitor_data : undefined,
@@ -60,6 +76,7 @@ async function cloneInnertube(customFetch, useSession, forceRefresh = false) {
     lastRefreshedAt = Date.now();
   }
 
+  // Create a new session with custom fetch for streaming
   const session = new Session(
     innertube.session.context,
     innertube.session.api_key,
@@ -68,7 +85,7 @@ async function cloneInnertube(customFetch, useSession, forceRefresh = false) {
     innertube.session.config_data,
     innertube.session.player,
     cookie,
-    customFetch ?? innertube.session.http.fetch,
+    customFetch,
     innertube.session.cache,
     sessionTokens?.potoken,
   );
