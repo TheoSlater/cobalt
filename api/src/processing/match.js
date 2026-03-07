@@ -113,6 +113,7 @@ export default async function({ host, patternMatch, params, authType }) {
             case "youtube":
                 let fetchInfo = {
                     dispatcher,
+                    requestIP,
                     id: patternMatch.id.slice(0, 11),
                     quality: params.videoQuality,
                     codec: params.youtubeVideoCodec,

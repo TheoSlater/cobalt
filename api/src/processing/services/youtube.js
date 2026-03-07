@@ -1,246 +1,320 @@
-import HLS from "hls-parser";
-import { fetch } from "undici";
-import { Innertube, Session } from "youtubei.js";
+import { YtDlp } from "ytdlp-nodejs";
 
-import { env, genericUserAgent } from "../../config.js";
-import { getCookie } from "../cookie/manager.js";
-import { getYouTubeSession } from "../helpers/youtube-session.js";
+const ytdlp = new YtDlp();
+const AUDIO_EXTENSIONS = new Set([
+    "aac",
+    "flac",
+    "mp3",
+    "m4a",
+    "opus",
+    "vorbis",
+    "wav",
+    "alac",
+]);
+const HTTP_PREFIX = "http";
 
-const PLAYER_REFRESH_PERIOD = 1000 * 60 * 15;
-
-let innertube;
-let lastRefreshedAt;
-
-const STREAM_HEADERS = {
-  "User-Agent": genericUserAgent,
-  Origin: "https://www.youtube.com",
-  Referer: "https://www.youtube.com/",
-  Accept: "*/*",
-  "Accept-Language": "en-US,en;q=0.9",
-};
-
-function createFetch(dispatcher) {
-  return async (input, init = {}) => {
-    // If input is a Request object, extract URL and method
-    let url = input;
-    let method = init?.method || "GET";
-    let body = init?.body;
-
-    if (input instanceof Request) {
-      url = input.url;
-      method = input.method || "GET";
-      // For GET/HEAD requests, don't pass body even if init has it
-      if (method !== "GET" && method !== "HEAD") {
-        body = init.body;
-      }
+function toNumber(value) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
     }
 
-    return fetch(url, {
-      method,
-      body,
-      dispatcher,
-      headers: {
-        ...STREAM_HEADERS,
-        ...(init.headers || {}),
-      },
-    });
-  };
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
 }
 
-async function cloneInnertube(customFetch, useSession, forceRefresh = false) {
-  const shouldRefresh =
-    forceRefresh ||
-    !lastRefreshedAt ||
-    Date.now() - lastRefreshedAt > PLAYER_REFRESH_PERIOD;
-
-  const rawCookie = getCookie("youtube");
-  const cookie = rawCookie?.toString();
-
-  const sessionTokens = getYouTubeSession();
-  const hasSessionTokens = Boolean(sessionTokens?.potoken && sessionTokens?.visitor_data);
-  const retrieve_player = true;
-
-  if (useSession && env.ytSessionServer && !hasSessionTokens) {
-    useSession = false;
-  }
-
-  if (!innertube || shouldRefresh) {
-    innertube = await Innertube.create({
-      retrieve_player,
-      player_id: "0004de42",
-      cookie,
-      po_token: useSession ? sessionTokens?.potoken : undefined,
-      visitor_data: useSession ? sessionTokens?.visitor_data : undefined,
-    });
-
-    lastRefreshedAt = Date.now();
-  }
-
-  // Create a new session with custom fetch for streaming
-  const session = new Session(
-    innertube.session.context,
-    innertube.session.api_key,
-    innertube.session.api_version,
-    innertube.session.account_index,
-    innertube.session.config_data,
-    innertube.session.player,
-    cookie,
-    customFetch,
-    innertube.session.cache,
-    sessionTokens?.potoken,
-  );
-
-  return new Innertube(session);
+function hasAudio(format) {
+    const acodec = typeof format?.acodec === "string" ? format.acodec.toLowerCase() : "";
+    return acodec && acodec !== "none";
 }
 
-async function getBasicInfoWithFallback(yt, id, preferredClient) {
-  const clients = [
-    preferredClient,
-    "WEB",
-    "WEB_EMBEDDED",
-    "IOS",
-    "ANDROID",
-    "TVHTML5",
-  ].filter(Boolean);
-
-  let info;
-  let usedClient;
-
-  for (const client of clients) {
-    try {
-      info = await yt.getBasicInfo(id, { client });
-      usedClient = client;
-      break;
-    } catch {}
-  }
-
-  if (!info) {
-    throw new Error("info_fetch_failed");
-  }
-
-  return { info, usedClient };
+function hasVideo(format) {
+    const vcodec = typeof format?.vcodec === "string" ? format.vcodec.toLowerCase() : "";
+    return vcodec && vcodec !== "none";
 }
 
-function decipherURL(format, player) {
-  if (format?.decipher && player) {
-    try {
-      return format.decipher(player);
-    } catch {}
-  }
+function isHttpFormat(format) {
+    const url = typeof format?.url === "string" ? format.url.trim() : "";
+    if (!url.startsWith(HTTP_PREFIX)) {
+        return false;
+    }
 
-  return format?.url;
+    const protocol = typeof format.protocol === "string" ? format.protocol.toLowerCase() : "";
+    if (!protocol) {
+        return true;
+    }
+
+    if (protocol.includes("dash") || protocol.includes("m3u8") || protocol.includes("fragment")) {
+        return false;
+    }
+
+    return true;
 }
 
-function pickFormats(streaming) {
-  const formats = [];
+function compareVideoQuality(a, b) {
+    const heightDiff = toNumber(b.height) - toNumber(a.height);
+    if (heightDiff !== 0) {
+        return heightDiff;
+    }
 
-  if (streaming?.adaptive_formats?.length) {
-    formats.push(...streaming.adaptive_formats);
-  }
+    const tbrDiff = toNumber(b.tbr) - toNumber(a.tbr);
+    if (tbrDiff !== 0) {
+        return tbrDiff;
+    }
 
-  if (streaming?.formats?.length) {
-    formats.push(...streaming.formats);
-  }
-
-  return formats;
+    return toNumber(b.width) - toNumber(a.width);
 }
 
-function pickFirstMedia(formats) {
-  let video;
-  let audio;
-  let muxed;
+function compareAudioQuality(a, b) {
+    const tbrDiff = toNumber(b.tbr) - toNumber(a.tbr);
+    if (tbrDiff !== 0) {
+        return tbrDiff;
+    }
 
-  for (const f of formats) {
-    if (f.has_video && f.has_audio && !muxed) muxed = f;
-    if (f.has_video && !video) video = f;
-    if (f.has_audio && !audio) audio = f;
-
-    if (video && audio && muxed) break;
-  }
-
-  return { video, audio, muxed };
+    return toNumber(b.filesize) - toNumber(a.filesize);
 }
 
-function buildStream(url) {
-  return url;
+function pickBestFormat(formats, predicate, comparator) {
+    const candidates = formats.filter(predicate);
+    if (!candidates.length) {
+        return;
+    }
+
+    return candidates.sort(comparator)[0];
+}
+
+function pickSubtitle(info, lang) {
+    if (!lang) {
+        return;
+    }
+
+    const normalized = lang.toLowerCase();
+    const sources = [info?.subtitles, info?.automatic_captions];
+
+    for (const source of sources) {
+        if (!source) {
+            continue;
+        }
+
+        const direct = source[lang] ?? source[normalized];
+        if (direct?.length) {
+            return direct[0].url;
+        }
+
+        const fallbackKey = Object.keys(source).find((key) => key?.toLowerCase() === normalized);
+        if (fallbackKey) {
+            return source[fallbackKey][0].url;
+        }
+    }
+}
+
+function normalizeInfo(info) {
+    if (info?._type === "playlist" && Array.isArray(info.entries) && info.entries.length) {
+        return info.entries[0];
+    }
+
+    return info;
+}
+
+function extractJson(stdout) {
+    const trimmed = (stdout ?? "").trim();
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+
+    if (start === -1 || end === -1 || end <= start) {
+        throw new Error("unable to parse yt-dlp output");
+    }
+
+    return JSON.parse(trimmed.slice(start, end + 1));
+}
+
+async function fetchVideoInfo(videoUrl, sourceAddress) {
+    const options = {
+        dumpSingleJson: true,
+        skipDownload: true,
+        quiet: true,
+        noWarnings: true,
+        noColor: true,
+        noProgress: true,
+    };
+
+    if (sourceAddress) {
+        options.sourceAddress = sourceAddress;
+    }
+
+    const result = await ytdlp.execAsync(videoUrl, options);
+    if (!result?.stdout) {
+        throw new Error("empty yt-dlp output");
+    }
+
+    return extractJson(result.stdout);
+}
+
+function buildFilenameAttributes({ info, id, extension, resolution, qualityLabel }) {
+    const attrs = {
+        service: "youtube",
+        id,
+        title: info?.title,
+        author: info?.uploader,
+        extension,
+    };
+
+    if (resolution) {
+        attrs.resolution = resolution;
+    }
+
+    if (qualityLabel) {
+        attrs.qualityLabel = qualityLabel;
+    }
+
+    return attrs;
+}
+
+function buildOriginalRequest(o, url) {
+    return {
+        id: o.id,
+        quality: o.quality,
+        codec: o.codec,
+        container: o.container,
+        dubLang: o.dubLang,
+        youtubeHLS: o.youtubeHLS,
+        subtitleLang: o.subtitleLang,
+        isAudioMuted: o.isAudioMuted,
+        isAudioOnly: o.isAudioOnly,
+        requestIP: o.requestIP,
+        url,
+    };
 }
 
 export default async function (o) {
-  const fetcher = createFetch(o.dispatcher);
+    const videoUrl = `https://www.youtube.com/watch?v=${o.id}`;
+    let rawInfo;
 
-  let yt = await cloneInnertube(fetcher, Boolean(env.ytSessionServer));
-
-  const { info, usedClient } = await getBasicInfoWithFallback(
-    yt,
-    o.id,
-    o.innertubeClient || "IOS",
-  );
-
-  const basic = info.basic_info;
-  const streaming = info.streaming_data;
-
-  if (!streaming) {
-    return { error: "youtube.no_streams" };
-  }
-
-  const formats = pickFormats(streaming);
-
-  if (!formats?.length) {
-    return { error: "youtube.no_matching_format" };
-  }
-
-  const { video, audio, muxed } = pickFirstMedia(formats);
-
-  let videoURL;
-  let audioURL;
-  let muxedURL;
-
-  if (muxed) {
-    muxedURL = decipherURL(muxed, yt.session.player);
-  } else {
-    if (!video || !audio) {
-      return { error: "youtube.no_matching_format" };
+    try {
+        rawInfo = await fetchVideoInfo(videoUrl, o.requestIP);
+    } catch {
+        return { error: "fetch.fail" };
     }
 
-    videoURL = decipherURL(video, yt.session.player);
-    audioURL = decipherURL(audio, yt.session.player);
-  }
+    const videoInfo = normalizeInfo(rawInfo);
+    const formats = Array.isArray(videoInfo?.formats) ? videoInfo.formats : [];
 
-  if ((!muxedURL && (!videoURL || !audioURL)) || (muxed && !muxedURL)) {
-    yt = await cloneInnertube(fetcher, Boolean(env.ytSessionServer), true);
-
-    if (muxed) {
-      muxedURL = decipherURL(muxed, yt.session.player);
-    } else {
-      videoURL = decipherURL(video, yt.session.player);
-      audioURL = decipherURL(audio, yt.session.player);
+    if (!formats.length) {
+        return { error: "youtube.no_matching_format" };
     }
-  }
 
-  if ((!muxedURL && (!videoURL || !audioURL)) || (muxed && !muxedURL)) {
-    return { error: "youtube.decipher" };
-  }
+    const muxed = pickBestFormat(
+        formats,
+        (format) => isHttpFormat(format) && hasVideo(format) && hasAudio(format),
+        compareVideoQuality
+    );
 
-  return {
-    type: muxed ? "proxy" : "merge",
-    urls: muxed ? buildStream(muxedURL) : [buildStream(videoURL), buildStream(audioURL)],
-    headers: STREAM_HEADERS,
-    filenameAttributes: {
-      service: "youtube",
-      id: o.id,
-      title: basic.title,
-      author: basic.author,
-      resolution: `${(muxed ?? video).width}x${(muxed ?? video).height}`,
-      qualityLabel: `${(muxed ?? video).height}p`,
-      extension: "mp4",
-    },
-    fileMetadata: {
-      title: basic.title,
-      artist: basic.author,
-    },
-    originalRequest: {
-      ...o,
-      innertubeClient: usedClient,
-    },
-  };
+    const videoOnly = pickBestFormat(
+        formats,
+        (format) => isHttpFormat(format) && hasVideo(format) && !hasAudio(format),
+        compareVideoQuality
+    );
+
+    const audioOnly = pickBestFormat(
+        formats,
+        (format) => isHttpFormat(format) && hasAudio(format) && !hasVideo(format),
+        compareAudioQuality
+    );
+
+    const metadata = {
+        title: videoInfo?.title,
+        artist: videoInfo?.uploader,
+    };
+
+    const subtitleUrl = pickSubtitle(videoInfo, o.subtitleLang);
+    if (subtitleUrl && o.subtitleLang) {
+        metadata.sublanguage = o.subtitleLang;
+    }
+
+    const audioExt =
+        typeof audioOnly?.ext === "string" ? audioOnly.ext.toLowerCase() : undefined;
+    const bestAudio = audioExt && AUDIO_EXTENSIONS.has(audioExt) ? audioExt : undefined;
+    const originalRequest = buildOriginalRequest(o, videoUrl);
+
+    if (o.isAudioOnly) {
+        const audioStream = audioOnly ?? muxed;
+
+        if (!audioStream) {
+            return { error: "youtube.no_matching_format" };
+        }
+
+        return {
+            type: "proxy",
+            urls: audioStream.url,
+            bestAudio,
+            filenameAttributes: buildFilenameAttributes({
+                info: videoInfo,
+                id: o.id,
+                extension: audioStream.ext ?? "m4a",
+                qualityLabel: "audio",
+            }),
+            fileMetadata: metadata,
+            subtitles: subtitleUrl,
+            isAudioOnly: true,
+            originalRequest,
+        };
+    }
+
+    if (muxed && !o.isAudioMuted) {
+        return {
+            type: "proxy",
+            urls: muxed.url,
+            bestAudio,
+            filenameAttributes: buildFilenameAttributes({
+                info: videoInfo,
+                id: o.id,
+                extension: muxed.ext ?? "mp4",
+                resolution:
+                    muxed.width && muxed.height ? `${muxed.width}x${muxed.height}` : undefined,
+                qualityLabel: muxed.height ? `${muxed.height}p` : undefined,
+            }),
+            fileMetadata: metadata,
+            subtitles: subtitleUrl,
+            originalRequest,
+        };
+    }
+
+    if (!videoOnly || !audioOnly) {
+        if (muxed) {
+            return {
+                type: "proxy",
+                urls: muxed.url,
+                bestAudio,
+                filenameAttributes: buildFilenameAttributes({
+                    info: videoInfo,
+                    id: o.id,
+                    extension: muxed.ext ?? "mp4",
+                    resolution:
+                        muxed.width && muxed.height ? `${muxed.width}x${muxed.height}` : undefined,
+                    qualityLabel: muxed.height ? `${muxed.height}p` : undefined,
+                }),
+                fileMetadata: metadata,
+                subtitles: subtitleUrl,
+                originalRequest,
+            };
+        }
+
+        return { error: "youtube.no_matching_format" };
+    }
+
+    return {
+        type: "merge",
+        urls: [videoOnly.url, audioOnly.url],
+        bestAudio,
+        filenameAttributes: buildFilenameAttributes({
+            info: videoInfo,
+            id: o.id,
+            extension: videoOnly.ext ?? "mp4",
+            resolution:
+                videoOnly.width && videoOnly.height ? `${videoOnly.width}x${videoOnly.height}` : undefined,
+            qualityLabel: videoOnly.height ? `${videoOnly.height}p` : undefined,
+        }),
+        fileMetadata: metadata,
+        subtitles: subtitleUrl,
+        originalRequest,
+    };
 }

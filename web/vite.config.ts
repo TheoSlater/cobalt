@@ -1,17 +1,19 @@
 import mime from "mime";
 import basicSSL from "@vitejs/plugin-basic-ssl";
 
-import { glob } from "glob";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { createSitemap } from "svelte-sitemap/src/index";
 import { defineConfig, searchForWorkspaceRoot, type PluginOption } from "vite";
 
 import { join, basename } from "node:path";
-import { createReadStream } from "node:fs";
-import { cp, readdir, mkdir } from "node:fs/promises";
+import { createReadStream, existsSync, readdirSync } from "node:fs";
+import { cp, mkdir } from "node:fs/promises";
 
 const exposeLibAV: PluginOption = (() => {
     const IMPUT_MODULE_DIR = join(__dirname, 'node_modules/@imput');
+    const libavModules = readdirSync(IMPUT_MODULE_DIR).filter((module) =>
+        module.startsWith("libav.js"),
+    );
     return {
         name: "vite-libav.js",
         configureServer(server) {
@@ -21,7 +23,15 @@ const exposeLibAV: PluginOption = (() => {
                 const filename = basename(req.url).split('?')[0];
                 if (!filename) return next();
 
-                const [file] = await glob(join(IMPUT_MODULE_DIR, '/**/dist/', filename));
+                let file: string | undefined;
+                for (const module of libavModules) {
+                    const candidate = join(IMPUT_MODULE_DIR, module, 'dist', filename);
+                    if (existsSync(candidate)) {
+                        file = candidate;
+                        break;
+                    }
+                }
+
                 if (!file) return next();
 
                 const fileType = mime.getType(filename);
@@ -39,9 +49,7 @@ const exposeLibAV: PluginOption = (() => {
             const assets = join(options.dir, '_libav');
             await mkdir(assets, { recursive: true });
 
-            const modules = await readdir(IMPUT_MODULE_DIR).then(
-                modules => modules.filter(m => m.startsWith('libav.js'))
-            );
+            const modules = libavModules;
 
             for (const module of modules) {
                 const distFolder = join(IMPUT_MODULE_DIR, module, 'dist/');

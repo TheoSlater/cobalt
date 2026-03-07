@@ -26,20 +26,28 @@ function validateSession(data) {
 }
 
 async function loadSession() {
-  const url = new URL(env.ytSessionServer);
-  url.pathname = "/token";
+  if (!env.ytSessionServer) {
+    return;
+  }
 
-  const response = await fetch(url, { dispatcher: agent });
-  const json = await response.json();
+  try {
+    const url = new URL(env.ytSessionServer);
+    url.pathname = "/token";
 
-  validateSession(json);
+    const response = await fetch(url, { dispatcher: agent });
+    const json = await response.json();
 
-  if (!session || session.updated < json.updated) {
-    session = json;
+    validateSession(json);
 
-    cluster.broadcast({
-      youtube_session: json,
-    });
+    if (!session || session.updated < json.updated) {
+      session = json;
+
+      cluster.broadcast({
+        youtube_session: json,
+      });
+    }
+  } catch (error) {
+    console.warn("failed to load youtube session:", error.message);
   }
 }
 
