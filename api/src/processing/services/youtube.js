@@ -119,8 +119,10 @@ const cloneInnertube = async (customFetch, useSession, requestIP) => {
             fetch: customFetch,
             retrieve_player,
             cookie,
-            po_token: useSession ? sessionTokens?.potoken : undefined,
-            visitor_data: useSession ? sessionTokens?.visitor_data : undefined,
+            // Provide session tokens whenever available to reduce bot checks,
+            // even if we're not using a session-only client.
+            po_token: sessionTokens?.potoken,
+            visitor_data: sessionTokens?.visitor_data,
             enable_session_cache: false,
             player_id: env.ytPlayerId,
         });
