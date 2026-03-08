@@ -134,6 +134,10 @@ export const getYouTubeSession = () => {
 }
 
 export const setup = () => {
+    console.log(`${Green('[✓]')} youtube session setup:`, {
+        ytSessionServer: env.ytSessionServer || null,
+        ytGeneratePoTokens: !!env.ytGeneratePoTokens,
+    });
     if (cluster.isPrimary) {
         wrapLoad(true);
         if (env.ytSessionReloadInterval > 0) {
