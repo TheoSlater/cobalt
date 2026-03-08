@@ -38,7 +38,7 @@ const defaultSettings: CobaltSettings = {
         youtubeVideoCodec: "h264",
         youtubeVideoContainer: "auto",
         youtubeDubLang: "original",
-        youtubeHLS: false,
+        youtubeHLS: true,
         youtubeBetterAudio: false,
     },
     privacy: {
