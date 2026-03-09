@@ -11,6 +11,21 @@ we recommend [deploying your own instance](/docs/run-an-instance.md) if you wish
 
 you can read [the api documentation here](/docs/api.md).
 
+## health checks & keep-alive
+
+The API now exposes a lightweight `/health` endpoint that responds with `status: "ok"`, the configured services, git metadata, and uptime. Hit `https://<your-instance>/health` from any HTTP client to confirm the service is awake without running a full save request.
+
+If you want to keep a Render free tier (or any other sleep-prone host) awake, use the bundled helper script:
+
+```bash
+cd api
+npm run keep-alive
+```
+
+The script pings `KEEP_ALIVE_URL` (falls back to `API_URL`) every `KEEP_ALIVE_INTERVAL_SECONDS` seconds (default 600). You can override the interval or the request timeout with `KEEP_ALIVE_INTERVAL_SECONDS` and `KEEP_ALIVE_TIMEOUT_MS`.
+
+Run the script from a scheduler (Render cron, cron-job.org, a small VPS, etc.) or any long-running machine; as long as it hits `/health` at least once every 14 minutes the free tier instance will never idle out.
+
 ## supported services
 this list is not final and keeps expanding over time!
 if the desired service isn't supported yet, feel free to create an appropriate issue (or a pull request 👀).

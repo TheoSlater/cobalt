@@ -1,7 +1,13 @@
-{
+﻿{
     "cobalt": "cobalt",
     "meowbalt": "meowbalt",
     "beta": "beta",
 
-    "embed.description": "cobalt lets you save what you love without ads, tracking, paywalls or other nonsense. just paste the link and you're ready to rock!"
+    "embed.description": "cobalt lets you save what you love without ads, tracking, paywalls or other nonsense. just paste the link and you're ready to rock!",
+
+    "healthChip.status.online": "API online",
+    "healthChip.status.offline": "API offline",
+    "healthChip.status.checking": "checking API...",
+    "healthChip.lastChecked": "last checked",
+    "healthChip.retry": "retry now"
 }

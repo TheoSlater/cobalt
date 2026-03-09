@@ -11,7 +11,8 @@
   "scripts": {
     "start": "node src/cobalt",
     "test": "node src/util/test",
-    "token:jwt": "node src/util/generate-jwt-secret"
+    "token:jwt": "node src/util/generate-jwt-secret",
+    "keep-alive": "node src/util/keep-alive.js"
   },
   "repository": {
     "type": "git",

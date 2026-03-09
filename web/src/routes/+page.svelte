@@ -1,6 +1,7 @@
 <script>
     import { t } from "$lib/i18n/translations";
 
+    import HealthChip from "$components/misc/HealthChip.svelte";
     import Omnibox from "$components/save/Omnibox.svelte";
     import Meowbalt from "$components/misc/Meowbalt.svelte";
     import SupportedServices from "$components/save/SupportedServices.svelte";
@@ -12,6 +13,9 @@
 </svelte:head>
 
 <div id="cobalt-save-container" class="center-column-container">
+    <div id="health-chip-wrapper">
+        <HealthChip />
+    </div>
     <SupportedServices />
     <main
         id="cobalt-save"
@@ -31,6 +35,13 @@
     #cobalt-save-container {
         padding: var(--padding);
         overflow: hidden;
+    }
+
+    #health-chip-wrapper {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        margin-bottom: 12px;
     }
 
     #cobalt-save {

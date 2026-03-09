@@ -57,8 +57,8 @@ export const runAPI = async (express, app, __dirname, isPrimary = true) => {
     const startTime = new Date();
     const startTimestamp = startTime.getTime();
 
-    const getServerInfo = (ip) => {
-        return JSON.stringify({
+    const getServerInfoPayload = (ip) => {
+        return {
             cobalt: {
                 version: version,
                 url: env.apiURL,
@@ -69,7 +69,11 @@ export const runAPI = async (express, app, __dirname, isPrimary = true) => {
                 }),
             },
             git,
-        });
+        };
+    }
+
+    const getServerInfo = (ip) => {
+        return JSON.stringify(getServerInfoPayload(ip));
     }
 
     const handleRateExceeded = (_, res) => {
@@ -321,6 +325,21 @@ export const runAPI = async (express, app, __dirname, isPrimary = true) => {
         }
 
         return stream(res, streamInfo);
+    });
+
+    app.get('/health', (req, res) => {
+        const payload = getServerInfoPayload(getIP(req));
+        const startMs = Number(payload.cobalt?.startTime) || startTimestamp;
+
+        res.status(200).json({
+            status: "ok",
+            version: payload.cobalt.version,
+            url: payload.cobalt.url,
+            git: payload.git,
+            services: payload.cobalt.services,
+            startTime: new Date(startMs).toISOString(),
+            uptime: Math.max(Date.now() - startMs, 0),
+        });
     });
 
     app.get('/', (req, res) => {

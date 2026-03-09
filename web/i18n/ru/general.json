@@ -1,6 +1,11 @@
-{
+﻿{
     "cobalt": "кобальт",
     "meowbalt": "мяубальт",
     "beta": "бета",
-    "embed.description": "кобальт помогает тебе сохранять то, что ты любишь, без рекламы, трекеров и прочей ерунды. просто вставь ссылку!"
+    "embed.description": "кобальт помогает тебе сохранять то, что ты любишь, без рекламы, трекеров и прочей ерунды. просто вставь ссылку!",
+    "healthChip.status.online": "API онлайн",
+    "healthChip.status.offline": "API недоступен",
+    "healthChip.status.checking": "проверка API…",
+    "healthChip.lastChecked": "последняя проверка",
+    "healthChip.retry": "повторить"
 }

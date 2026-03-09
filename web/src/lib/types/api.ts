@@ -109,6 +109,20 @@ export type CobaltServerInfo = {
     }
 }
 
+export type CobaltHealthResponse = {
+    status: "ok",
+    version: string,
+    url: string,
+    startTime: string,
+    uptime: number,
+    services: string[],
+    git: {
+        branch: string,
+        commit: string,
+        remote: string,
+    }
+}
+
 // TODO: strict partial
 // this allows for extra properties, which is not ideal,
 // but i couldn't figure out how to make a strict partial :(
