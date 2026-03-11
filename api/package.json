@@ -40,7 +40,7 @@
         "set-cookie-parser": "2.7.2",
         "undici": "^6.22.0",
         "url-pattern": "1.0.3",
-        "youtubei.js": "16.0.1",
+        "youtubei.js": "github:LuanRT/YouTube.js#21583f7eec0a06b8a7536abfb55942f4ab300e1e",
         "zod": "^4.2.1"
     },
     "optionalDependencies": {

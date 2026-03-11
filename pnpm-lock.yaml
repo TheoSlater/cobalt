@@ -62,8 +62,8 @@ importers:
         specifier: 1.0.3
         version: 1.0.3
       youtubei.js:
-        specifier: 16.0.1
-        version: 16.0.1
+        specifier: github:LuanRT/YouTube.js#21583f7eec0a06b8a7536abfb55942f4ab300e1e
+        version: https://codeload.github.com/LuanRT/YouTube.js/tar.gz/21583f7eec0a06b8a7536abfb55942f4ab300e1e
       zod:
         specifier: ^4.2.1
         version: 4.3.6
@@ -2376,8 +2376,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  youtubei.js@16.0.1:
-    resolution: {integrity: sha512-3802bCAGkBc2/G5WUTc0l/bO5mPYJbQAHL04d9hE9PnrDHoBUT8MN721Yqt4RCNncAXdHcfee9VdJy3Fhq1r5g==}
+  youtubei.js@https://codeload.github.com/LuanRT/YouTube.js/tar.gz/21583f7eec0a06b8a7536abfb55942f4ab300e1e:
+    resolution: {tarball: https://codeload.github.com/LuanRT/YouTube.js/tar.gz/21583f7eec0a06b8a7536abfb55942f4ab300e1e}
+    version: 16.0.1
 
   zimmerframe@1.1.2:
     resolution: {integrity: sha512-rAbqEGa8ovJy4pyBxZM70hg4pE6gDgaQ0Sl9M3enG3I0d6H4XSAM3GeNGLKnsBpuijUow064sf7ww1nutC5/3w==}
@@ -4486,7 +4487,7 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  youtubei.js@16.0.1:
+  youtubei.js@https://codeload.github.com/LuanRT/YouTube.js/tar.gz/21583f7eec0a06b8a7536abfb55942f4ab300e1e:
     dependencies:
       '@bufbuild/protobuf': 2.2.5
       meriyah: 6.1.4
